@@ -1,21 +1,57 @@
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import GPT2LMHeadModel, GPT2Tokenizer, TextDataset, DataCollatorForLanguageModeling, Trainer, TrainingArguments
 
-tokenizer = AutoTokenizer.from_pretrained("gpt2")
-model = AutoModelForCausalLM.from_pretrained("gpt2")
+# 加载预训练的GPT-2模型和分词器
+tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+model = GPT2LMHeadModel.from_pretrained('gpt2')
 
-prompt = "Once upon a time, in a land far far away,"
-input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+# 准备训练数据
+train_path = 'input.txt'  # 替换为你的训练数据路径
+train_dataset = TextDataset(
+    tokenizer=tokenizer,
+    file_path=train_path,
+    block_size=128
+)
 
-num_words = 200  
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer, 
+    mlm=False
+)
 
-# 计算max_length，假设每个单词平均对应1个token
-# 需要减去提示文本中已有的token数量
-prompt_length = len(tokenizer.encode(prompt))
-real_max_length = num_words + prompt_length
+# 设置训练参数
+training_args = TrainingArguments(
+    output_dir="./gpt2_model",          # 输出目录
+    overwrite_output_dir=True,          # 覆盖输出目录
+    num_train_epochs=3,                # 训练轮数
+    per_device_train_batch_size=4,     # 每个设备的训练批次大小
+    save_steps=10_000,                 # 保存模型的步数
+    save_total_limit=2,                # 最多保存的模型数量
+    prediction_loss_only=True,
+)
+
+# 初始化Trainer
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    data_collator=data_collator,
+    train_dataset=train_dataset,
+)
+
+# 开始训练
+trainer.train()
+
+# 保存模型
+trainer.save_model("./gpt2_model")
+
+# 使用训练好的模型生成文本
+model = GPT2LMHeadModel.from_pretrained("./gpt2_model")
+model.eval()
+
+# 输入文本
+input_text = "hello, nice to me you, my name is"
+input_ids = tokenizer.encode(input_text, return_tensors='pt')
 
 # 生成文本
-output = model.generate(input_ids, max_length = real_max_length, num_return_sequences=1, temperature=1.7, repetition_penalty=1.7)
-
-# 解码生成的文本
+output = model.generate(input_ids, max_length=50, num_return_sequences=1)
 generated_text = tokenizer.decode(output[0], skip_special_tokens=True)
+
 print(generated_text)
